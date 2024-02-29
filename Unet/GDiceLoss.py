@@ -1,76 +1,80 @@
+"""
+這段程式定義了幾種不同版本的廣義 Dice 損失函數（Generalized Dice Loss），
+用於分割任務中的模型訓練。這些不同版本的損失函數主要針對不同的情況進行優化和改進。
+"""
 import torch
 import torch.nn.functional as F
 from torch import nn as nn
 from torch.autograd import Variable
 
 def flatten(tensor):
-    """Flattens a given tensor such that the channel axis is first.
-    The shapes are transformed as follows:
-       (N, C, D, H, W) -> (C, N * D * H * W)
     """
-    # number of channels
+    將給定的張量展平，使通道軸位於第一個位置。
+    形狀轉換如下：
+          (N, C, D, H, W) -> (C, N * D * H * W)
+    """
+
+    # 通道數量
     C = tensor.size(1)
-    # new axis order
+    #新的軸順序
     axis_order = (1, 0) + tuple(range(2, tensor.dim()))
-    # Transpose: (N, C, D, H, W) -> (C, N, D, H, W)
+    # 轉置：(N, C, D, H, W) -> (C, N, D, H, W)
     transposed = tensor.permute(axis_order)
-    # Flatten: (C, N, D, H, W) -> (C, N * D * H * W)
+    # 展平：(C, N, D, H, W) -> (C, N * D * H * W)
     return transposed.contiguous().view(C, -1)
 
 class _AbstractDiceLoss(nn.Module):
     """
-    Base class for different implementations of Dice loss.
+    不同版本 Dice 損失的基礎類。
     """
 
     def __init__(self, weight=None, sigmoid_normalization=True):
         super(_AbstractDiceLoss, self).__init__()
         self.register_buffer('weight', weight)
-        # The output from the network during training is assumed to be un-normalized probabilities and we would
-        # like to normalize the logits. Since Dice (or soft Dice in this case) is usually used for binary data,
-        # normalizing the channels with Sigmoid is the default choice even for multi-class segmentation problems.
-        # However if one would like to apply Softmax in order to get the proper probability distribution from the
-        # output, just specify sigmoid_normalization=False.
+        # 網絡輸出的預期是未正規化的概率，我們想對 logits 進行正規化。
+        # 由於 Dice（或在這種情況下的軟 Dice）通常用於二元數據，
+        # 因此即使對於多類分割問題，使用 Sigmoid 進行通道正規化也是默認選擇。
+        # 但是，如果希望應用 Softmax 以從輸出獲取正確的概率分佈，只需指定 sigmoid_normalization=False。
         if sigmoid_normalization:
             self.normalization = nn.Sigmoid()
         else:
             self.normalization = nn.Softmax(dim=1)
 
     def dice(self, input, target, weight):
-        # actual Dice score computation; to be implemented by the subclass
+        # 實際的 Dice 分數計算；由子類實現
         raise NotImplementedError
 
     def forward(self, input, target):
-        # get probabilities from logits
+        # 從 logits 獲取概率
         input = self.normalization(input)
 
-        # compute per channel Dice coefficient
+        #  計算每個通道的 Dice 系數
         per_channel_dice = self.dice(input, target, weight=self.weight)
 
-        # average Dice score across all channels/classes
+        # 平均所有通道/類別的 Dice 分數
         return 1. - torch.mean(per_channel_dice)
 
 class GeneralizedDiceLoss(_AbstractDiceLoss):
-    """Computes Generalized Dice Loss (GDL) as described in https://arxiv.org/pdf/1707.03237.pdf.
-    """
+    """計算廣義 Dice 損失 (GDL)，參考 https://arxiv.org/pdf/1707.03237.pdf。 """
 
     def __init__(self, sigmoid_normalization=True, epsilon=1e-6):
         super().__init__(weight=None, sigmoid_normalization=sigmoid_normalization)
         self.epsilon = epsilon
 
     def dice(self, input, target, weight):
-        assert input.size() == target.size(), "'input' and 'target' must have the same shape"
+        assert input.size() == target.size(), "'input' 和 'target' 必須具有相同的形狀"
 
         input = flatten(input)
         target = flatten(target)
         target = target.float()
 
         if input.size(0) == 1:
-            # for GDL to make sense we need at least 2 channels (see https://arxiv.org/pdf/1707.03237.pdf)
-            # put foreground and background voxels in separate channels
+            # 為了讓 GDL 有意義，我們需要至少 2 個通道(see https://arxiv.org/pdf/1707.03237.pdf)
+            # 將前景和背景像素放在不同的通道中
             input = torch.cat((input, 1 - input), dim=0)
             target = torch.cat((target, 1 - target), dim=0)
 
-        # GDL weighting: the contribution of each label is corrected by the inverse of its volume
+        #GDL 加權：每個標籤的貢獻由其體積的倒數校正
         w_l = target.sum(-1)
         w_l = 1 / (w_l * w_l).clamp(min=self.epsilon)
         w_l.requires_grad = False
@@ -84,27 +88,26 @@ class GeneralizedDiceLoss(_AbstractDiceLoss):
         return 2 * (intersect.sum() / denominator.sum())
 
 class pGeneralizedDiceLoss(_AbstractDiceLoss):
-    """Computes Generalized Dice Loss (GDL) as described in https://arxiv.org/pdf/1707.03237.pdf.
-    """
+    """計算修改版的廣義 Dice 損失 (GDL)，參考 https://arxiv.org/pdf/1707.03237.pdf。    """
 
     def __init__(self, sigmoid_normalization=True, epsilon=1e-6):
         super().__init__(weight=None, sigmoid_normalization=sigmoid_normalization)
         self.epsilon = epsilon
 
     def dice(self, input, target, weight):
-        assert input.size() == target.size(), "'input' and 'target' must have the same shape"
+        assert input.size() == target.size(), "'input' 和 'target' 必須具有相同的形狀"
 
         input = flatten(input)
         target = flatten(target)
         target = target.float()
 
         if input.size(0) == 1:
-            # for GDL to make sense we need at least 2 channels (see https://arxiv.org/pdf/1707.03237.pdf)
-            # put foreground and background voxels in separate channels
+            # 為了讓 GDL 有意義，我們需要至少 2 個通道(see https://arxiv.org/pdf/1707.03237.pdf)
+            #  將前景和背景像素放在不同的通道中
             input = torch.cat((input, 1 - input), dim=0)
             target = torch.cat((target, 1 - target), dim=0)
 
-        # GDL weighting: the contribution of each label is corrected by the inverse of its volume
+        # GDL 加權：每個標籤的貢獻由其體積的倒數校正
         w_l = target.sum(-1)
         w_l = 1 / (w_l * w_l).clamp(min=self.epsilon)
         w_l.requires_grad = False
@@ -119,8 +122,7 @@ class pGeneralizedDiceLoss(_AbstractDiceLoss):
         return gdice / (1 + 2.5*(1-gdice))
 
 class GeneralizedDiceLoss_high_confidence(_AbstractDiceLoss):
-    """Computes Generalized Dice Loss (GDL) as described in https://arxiv.org/pdf/1707.03237.pdf.
-    """
+    """計算修正的廣義 Dice 損失 (GDL)，參考 https://arxiv.org/pdf/1707.03237.pdf。  """
 
     def __init__(self, th, sigmoid_normalization=True, epsilon=1e-6):
         super().__init__(weight=None, sigmoid_normalization=sigmoid_normalization)
@@ -128,7 +130,7 @@ class GeneralizedDiceLoss_high_confidence(_AbstractDiceLoss):
         self.th = th
 
     def dice(self, input, target, weight):
-        assert input.size() == target.size(), "'input' and 'target' must have the same shape"
+        assert input.size() == target.size(), "'input' 和 'target' 必須具有相同的形狀"
 
         input = flatten(input)
         target = flatten(target)
@@ -143,12 +145,12 @@ class GeneralizedDiceLoss_high_confidence(_AbstractDiceLoss):
         # print(target_1)
 
         if input.size(0) == 1:
-            # for GDL to make sense we need at least 2 channels (see https://arxiv.org/pdf/1707.03237.pdf)
-            # put foreground and background voxels in separate channels
+            # 為了讓 GDL 有意義，我們需要至少 2 個通道(see https://arxiv.org/pdf/1707.03237.pdf)
+            # 將前景和背景像素放在不同的通道中
             input_1 = torch.cat((input_1, 1 - input_1), dim=0)
             target_1 = torch.cat((target_1, 1 - target_1), dim=0)
 
-        # GDL weighting: the contribution of each label is corrected by the inverse of its volume
+        # GDL 加權：每個標籤的貢獻由其體積的倒數校正
         w_l = target_1.sum(-1)
         w_l = 1 / (w_l * w_l).clamp(min=self.epsilon)
         w_l.requires_grad = False
