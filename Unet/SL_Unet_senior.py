@@ -2,7 +2,7 @@
 import pathlib
 from argparse import ArgumentParser
 from tqdm import tqdm
-from apex import amp
+#from apex import amp
 from datetime import datetime
 from pathlib import Path
 from dataset import *
@@ -40,7 +40,8 @@ torch.cuda.manual_seed_all(seed)          #將所有可用的 CUDA 設備的隨�
 np.random.seed(seed)                      #設置 NumPy 的隨機種子，確保 NumPy 中的隨機數生成器產生的數字序列與 PyTorch 中的一致。
 random.seed(seed)                         #設置 Python 的隨機種子，確保 Python 中的隨機操作（如列表的隨機排序）具有相同的起始點。
 
-class SupervisedSegmentation:    """用於執行監督式分割的訓練"""
+
+class SupervisedSegmentation:
     def __init__(self,           #將以下條件初始化
                  model,
                  device,
@@ -547,16 +548,16 @@ if __name__ == "__main__":
     # parser.add_argument("--d", "--device",
     #                     default=torch.device("cuda:2" if torch.cuda.is_available() else "cpu"))
     parser.add_argument("--loss", "--su_loss", default=GeneralizedDiceLoss())
-    parser.add_argument("--i_dir", "--img_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/train/5F_2/imgs",
+    parser.add_argument("--i_dir", "--img_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/train/5F_3/imgs",
                         type=pathlib.Path)
-    parser.add_argument("--l_dir", "--label_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/train/5F_2/labels",
+    parser.add_argument("--l_dir", "--label_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/train/5F_3/labels",
                         type=pathlib.Path)
     parser.add_argument("--s_dir", "--save_dir",
-                        default="./record/Unet/40/",
+                        default="./record/Unet/5F_3/",
                         type=pathlib.Path)
-    parser.add_argument("--v_i_dir", "--valid_img_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/valid/5F_2/imgs",
+    parser.add_argument("--v_i_dir", "--valid_img_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/valid/5F_3/imgs",
                         type=pathlib.Path)
-    parser.add_argument("--v_l_dir", "--valid_label_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/valid/5F_2/labels",
+    parser.add_argument("--v_l_dir", "--valid_label_dir", default="/home/jannawu/Desktop/all_cag_files/400/single/4aug/valid/5F_3/labels",
                         type=pathlib.Path)
     parser.add_argument("--t_txt_path", "--train_txt_path",
                         default="/home/p_01/Desktop/cag_supervised/labeled_400_2.txt")
@@ -565,7 +566,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", "--learning_rate", default=1e-1, type=float)
     parser.add_argument("--l2", "--weight_decay", default=1e-4)
     parser.add_argument("--k", "--metric", default=["loss", "SE", "SP", "PR", "F1"])
-    parser.add_argument("--model_path", default="./record/Unet/40/bestF1.pth")
+    parser.add_argument("--model_path", default="./record/Unet/5F_3/bestF1.pth")
     args = parser.parse_args()
 
     """創建SupervisedSegmentation的實例"""
@@ -588,6 +589,6 @@ if __name__ == "__main__":
                                    optim_name="SGD",
                                    model_path=args.model_path,
                                    apex=True)
-    # train.start()
+    train.start()
     train.load_model_and_save_csv()
-    # train.all_thresholds()
+    train.all_thresholds()

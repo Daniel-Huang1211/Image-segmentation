@@ -52,13 +52,16 @@ class ImageDataSet(Dataset):
 
         assert img.shape == (512, 512, 1)  # 確保圖像形狀符合預期
 
-
+        # 將圖像轉換為 PyTorch 預期的形狀
+        # 返回處理後的圖像
         if label:
-            img_trans = img.transpose((2, 0, 1))  # 將圖像轉換為 PyTorch 預期的形狀
-            return img_trans  # 返回處理後的圖像
+            img_trans = img.transpose((2, 0, 1))
+            return img_trans
+        # 將圖像像素值標準化
+        # 返回處理後的圖像
         else:
-            img = img / 255.0  # 將圖像像素值標準化
-            return img.transpose((2, 0, 1))  # 返回處理後的圖像
+            img = img / 255.0
+            return img.transpose((2, 0, 1))
 
 
     def __getitem__(self, idx):
